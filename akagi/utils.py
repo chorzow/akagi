@@ -1,8 +1,11 @@
+import itertools
+
 import cooler
 import pandas as pd
 import os
 from typing import Optional, Union
 import numpy as np
+import hicstraw
 
 
 def read_cooler(cool_path: Union[str, os.PathLike], resolution: Optional[int]) -> (cooler.Cooler, list):
@@ -31,6 +34,59 @@ def read_cooler(cool_path: Union[str, os.PathLike], resolution: Optional[int]) -
         raise e
 
     return cool_file, chromsizes
+
+
+def read_hic(path: Union[str, os.PathLike],
+             resolution: int,
+             norm: str = 'KR',
+             datatype: str = 'observed'
+             ):
+    """Returns a contact matrix for the specified chromosomes.
+    :arg path: path to a .hic file.
+    :arg resolution: desired resolution in bp.
+    :arg norm: normalization to get. Default is 'KR' (Knight-Ruiz). Supported: NONE, VC, VC_SQRT, KR, SCALE.
+    :arg datatype: type of data to get. Default is 'observed'. Supported: 'observed', 'oe' (observed/expected).
+    """
+
+    if norm not in {'NONE', 'VC', 'VC_SQRT', 'KR', 'SCALE'}:
+        raise ValueError(f"Wrong normalization {norm} provided. Supported: NONE, VC, VC_SQRT, KR, SCALE.")
+
+    hic = hicstraw.HiCFile(path)
+    chromnames = [chrom.name for chrom in hic.getChromosomes() if chrom.name != 'All']
+    chromlengths = [chrom.length for chrom in hic.getChromosomes() if chrom.name != 'All']
+
+    if len(chromlengths) == len(chromnames) == 1:  # prokaryotes
+        name = chromnames[0]
+        length = chromlengths[0]
+        try:
+            mat = hic.getMatrixZoomData(name, name, datatype, norm, 'BP', resolution)
+            np_matrix = mat.getRecordsAsMatrix(0, length, 0, length)
+            return np_matrix
+        except Exception as e:
+            raise e
+
+    if len(chromnames) > 1:  # eukaryotes
+        print("More than one chromosome found. Perhaps it's gonna take a while. Yet perhaps not.")
+        np_matrices = {}
+        for chr1, chr2 in itertools.combinations_with_replacement(chromnames, 2):
+            try:
+
+                mat = hic.getMatrixZoomData(chr1, chr2, datatype, norm, 'BP', resolution)
+
+                chr1_len = chromlengths[chromnames.index(chr1)]
+                chr2_len = chromlengths[chromnames.index(chr2)]
+
+                np_mat = mat.getRecordsAsMatrix(0, chr1_len, 0, chr2_len)
+                np_matrices[f"{chr1}_{chr2}"] = np_mat
+                return np_matrices
+
+            except Exception as e:
+                raise e
+
+    elif len(chromnames) == 0:
+        raise IndexError('No chromosomes found in provided .hic file.')
+    else:
+        raise ValueError('Unknown error.')
 
 
 def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
@@ -65,19 +121,19 @@ def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
     return stats
 
 
-def poke_cool(input: Union[str, os.PathLike],
+def poke_cool(path: Union[str, os.PathLike],
               n_diags: int,
               output: Union[str, os.PathLike],
-              resolution: int=1000
+              resolution: int = 1000
               ) -> cooler.Cooler:
     """Poke out main diagonals of a contact matrix.
-    :param input: path to a .cool file to operate with.
+    :param path: path to a .cool file to operate with.
     :param n_diags: number of diagonals to poke out.
     :param resolution: specified resolution (if you are working with .mcool file).
     :param output: output file path.
     :returns: a cool file of specified resolution with n_diags diagonals nullified."""
 
-    clr, csz = read_cooler(cool_path=input,
+    clr, csz = read_cooler(cool_path=path,
                            resolution=resolution)
 
     pixels = pd.DataFrame(clr.pixels()[:])

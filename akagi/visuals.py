@@ -1,3 +1,5 @@
+import os
+
 import cooler
 import cooltools
 import hicstraw
@@ -13,7 +15,7 @@ def plot_cooler(clr: cooler.Cooler,
                 vmin=Optional[float],
                 vmax=Optional[float],
                 balance: bool = True,
-                cmap: str = 'viridis',
+                cmap: str = 'Blues',
                 xlabel=Optional[str],
                 ylabel=Optional[str],
                 **kwargs
@@ -45,11 +47,9 @@ def plot_cooler(clr: cooler.Cooler,
         )
     else:
         try:
-            im = ax.matshow(
-                clr.matrix()[slice(region[0], region[1])]
-            )
+            im = ax.matshow(clr.matrix()[slice(region[0], region[1])])
         except IndexError:
-            raise IndexError('Wrong regions format. Accepted format: [start, stop]; start and stop are integers.')
+            raise IndexError('Wrong regions format. Accepted format: [start, stop] where start and stop are integers.')
         except Exception as e:
             raise e
 
@@ -66,3 +66,10 @@ def plot_cooler(clr: cooler.Cooler,
     ax.xaxis.set_visible(False)
 
     return ax
+
+
+def plot_hic(hic: hicstraw.HiCFile,
+             vmin=Optional[float],
+             vmax=Optional[float],
+             ):
+    pass
