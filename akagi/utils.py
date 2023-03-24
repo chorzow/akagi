@@ -3,7 +3,7 @@ import itertools
 import cooler
 import pandas as pd
 import os
-from typing import Optional, Union
+from typing import Optional, Union, List
 import numpy as np
 import hicstraw
 
@@ -40,7 +40,7 @@ def read_hic(path: Union[str, os.PathLike],
              resolution: int,
              norm: str = 'KR',
              datatype: str = 'observed'
-             ):
+             ) -> Union[np.ndarray, dict]:
     """Returns a contact matrix for the specified chromosomes.
     :arg path: path to a .hic file.
     :arg resolution: desired resolution in bp.
@@ -78,6 +78,7 @@ def read_hic(path: Union[str, os.PathLike],
 
                 np_mat = mat.getRecordsAsMatrix(0, chr1_len, 0, chr2_len)
                 np_matrices[f"{chr1}_{chr2}"] = np_mat
+
                 return np_matrices
 
             except Exception as e:
@@ -104,8 +105,8 @@ def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
 
     stats = dict()
     for line in lines:
-        l = line.split(': ')
-        stats[l[0]] = l[1].split(' ')
+        line_splitted = line.split(': ')
+        stats[line_splitted[0]] = line_splitted[1].split(' ')
     for key, val in stats.items():
         stats[key] = list(filter(None, val))
     for key, val in stats.items():
@@ -164,3 +165,132 @@ def poke_cool(path: Union[str, os.PathLike],
         print(e)
 
     return c_poked
+
+
+class DistillerStats:
+    """Operates with different sections of distiller's .stats file.
+    Can be initialized with custom tables (just in case).
+    Different attributes of this class represent different sections of .stats file."""
+    def __init__(self, path, **kwargs):
+        self.path = path
+        self._general = kwargs.get('general', None)
+        self._pair_types = kwargs.get('pair_types', None)
+        self._cis_trans = kwargs.get('cis_trans', None)
+        self._chrom_freq = kwargs.get('chrom_freq', None)
+        self._dist_freq = kwargs.get('dist_freq', None)
+
+    def read_section(self, section_name: Union[str, tuple]) -> List[str]:
+        try:
+            with open(self.path, 'r') as inf:
+                return [i.strip() for i in inf.readlines() if i.startswith(section_name)]
+        except Exception as e:
+            raise e
+
+    @property
+    def general(self) -> Union[pd.DataFrame, None]:
+        if self._general is None:
+            section_name = ('total', 'cis', 'trans')
+
+            try:
+                lines = self.read_section(section_name)
+                lines_filtered = [line for line in lines if not line.startswith(('cis_', 'trans_'))]
+                lines_filtered = [line.split('\t') for line in lines_filtered]
+
+                general_df = pd.DataFrame(lines_filtered).set_index(0)
+                general_df.index.name = None
+                general_df.columns = ['Number of reads']
+
+                return general_df
+
+            except Exception as e:
+                raise e
+
+        return None
+
+    @property
+    def pair_types(self) -> Union[pd.DataFrame, None]:
+        if self._pair_types is None:
+            section_name = 'pair_types'
+
+            try:
+                lines = self.read_section(section_name)
+                lines = [line.removeprefix('pair_types/').split('\t') for line in lines]
+
+                pair_types_df = pd.DataFrame(lines, columns=['Type', 'Number of pairs']).set_index('Type')
+
+                return pair_types_df
+
+            except Exception as e:
+                raise e
+
+        return None
+
+    @property
+    def cis_trans(self) -> Union[pd.DataFrame, None]:
+        if self._cis_trans is None:
+            section_name = ('cis_', 'trans_')
+
+            try:
+                lines = self.read_section(section_name)
+                lines = [line.split('\t') for line in lines]
+
+                cis_trans_df = pd.DataFrame(lines)
+
+                type_distance = cis_trans_df[0].str.split('_')
+
+                cis_trans_df['Type'] = type_distance.str[0]
+                cis_trans_df['Distance'] = type_distance.str[1]
+
+                cis_trans_df = cis_trans_df.rename(columns={1: 'Number of contacts'})
+                cis_trans_df = cis_trans_df.set_index(['Type', 'Distance']).drop(0, axis=1)
+
+                return cis_trans_df
+
+            except Exception as e:
+                raise e
+
+        return None
+
+    @property
+    def chrom_freq(self) -> Union[pd.DataFrame, None]:
+        if self._chrom_freq is None:
+            section_name = 'chrom_freq'
+
+            try:
+                lines = [line.removeprefix('chrom_freq/').split('\t') for line in self.read_section(section_name)]
+
+                chrom_freq_df = pd.DataFrame(lines)
+
+                chrom_freq_df[['chrA', 'chrB']] = chrom_freq_df[0].str.split('/', expand=True)
+
+                chrom_freq_df = chrom_freq_df.rename(columns={1: 'Number of contacts'})
+                chrom_freq_df = chrom_freq_df[['chrA', 'chrB', 'Number of contacts']]
+
+                return chrom_freq_df
+
+            except Exception as e:
+                raise e
+
+        return None
+
+    @property
+    def dist_freq(self) -> Union[pd.DataFrame, None]:
+        if self._dist_freq is None:
+            section_name = 'dist_freq'
+
+            try:
+                lines = [line.removeprefix('dist_freq/').split('\t') for line in self.read_section(section_name)]
+
+                dist_freq_df = pd.DataFrame(lines)
+
+                dist_freq_df[['Region', 'Contact_type']] = dist_freq_df[0].str.split('/', expand=True)
+
+                dist_freq_df = dist_freq_df.rename(columns={1: 'Number of contacts'})
+                dist_freq_df = dist_freq_df[['Region', 'Contact_type', 'Number of contacts']]
+
+                return dist_freq_df
+
+            except Exception as e:
+                raise e
+
+        return None
