@@ -3,73 +3,88 @@ import os
 import cooler
 import cooltools
 import hicstraw
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.ticker import FuncFormatter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from typing import Optional, List
+from typing import Optional, Tuple
+from matplotlib.ticker import FuncFormatter
+from matplotlib.colors import LogNorm
+
 
 
 def plot_cooler(clr: cooler.Cooler,
-                region: Optional[List[int]],
-                vmin=Optional[float],
-                vmax=Optional[float],
+                region: Optional[Tuple] = None,
+                vmin: Optional[float] = None,
+                vmax: Optional[float] = None,
                 balance: bool = True,
                 cmap: str = 'Blues',
-                xlabel=Optional[str],
-                ylabel=Optional[str],
+                ylabel: Optional[str] = None,
+                ax: Optional[plt.Axes] = None,
+                
                 **kwargs
                 ) -> plt.Axes:
     """Plots log-normalized contact matrix from a cooler.Cooler object.
     :arg clr: object of type cooler.Cooler.
-    :arg region: list of what region of the matrix to show IN BINS (not genomic coordinates). Format: [start, stop].
-    Default is whole genome (can take a long time for large genomes).
+    :arg region: tuple of format (chrom, start, end) where chrom is a string, start and end are int.
+    Defines a genomic region to plot. Default is whole genome (can take a longer time for large genomes).
     :arg vmin: min value for log-normalization.
     :arg vmax: max value for log-normalization.
     :arg balance: whether matrix should be balanced. Default is True.
     :arg cmap: name of the colormap to use. Only matplotlib default cmaps are supported for now.
-    :arg xlabel: xlabel.
     :arg ylabel: ylabel.
-    :returns: a figure of a contact matrix extracted from clr."""
+    :arg ax: plt.Axes object to plot matrix on. If not specified, such object is created.
+    :returns: plt.Axes object of a contact matrix extracted from clr."""
+
+    if ax is None:
+        _, ax = plt.subplots(**kwargs)
 
     resolution = clr.binsize
-    nbins = len(clr.bins()[:])
-
-    f, ax = plt.subplots(**kwargs)
-
     norm = LogNorm(vmax=vmax, vmin=vmin)
 
-    if not region:
-        im = ax.matshow(
-            clr.matrix(balance=balance)[:],
-            norm=norm,
-            cmap=cmap
-        )
+    if region is None:
+        plot_data = clr.matrix(balance=balance)[:]
     else:
-        try:
-            im = ax.matshow(clr.matrix()[slice(region[0], region[1])])
-        except IndexError:
-            raise IndexError('Wrong regions format. Accepted format: [start, stop] where start and stop are integers.')
-        except Exception as e:
-            raise e
+        plot_data = clr.matrix(balance=balance).fetch(region)
 
-    plt.axis([0, nbins, nbins, 0])
+    im = ax.matshow(plot_data, norm=norm, cmap=cmap)
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
     plt.colorbar(im, cax=cax, label='corrected frequencies')
 
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{int(x * resolution // 1000)} Kb'))
+
     if ylabel:
         ax.set_ylabel(ylabel)
-    if xlabel:
-        ax.set_xlabel(xlabel)
+
     ax.xaxis.set_visible(False)
 
     return ax
 
 
-def plot_hic(hic: hicstraw.HiCFile,
-             vmin=Optional[float],
-             vmax=Optional[float],
-             ):
+def plot_hic(hic: np.ndarray,
+             vmin: float = 0,
+             vmax: Optional[float] = None,
+             region: Optional[Tuple] = None,
+             cmap: Optional[str] = 'Blues',
+             ylabel: Optional[str] = None,
+             ax: Optional[plt.Axes] = None,
+             **kwargs
+             ) -> plt.Axes:
+    """Plots normalized contact matrix obtained from .hic file. Downstream processing of read_hic from utils.
+    :arg hic: contact matrix.
+    :arg region: tuple of format (chrom, start, end) where chrom is a string, start and end are int.
+    Defines a genomic region to plot. Default is whole genome (can take a longer time for large genomes).
+    :arg vmin: min value for log-normalization.
+    :arg vmax: max value for log-normalization.
+    :arg cmap: name of the colormap to use. Only matplotlib default cmaps are supported for now.
+    :arg ylabel: ylabel.
+    :arg ax: plt.Axes object to plot matrix on. If not specified, such object is created.
+    :returns: plt.Axes object of a contact matrix extracted from hic."""
+    
+    if ax is None:
+        _, ax = plt.subplots(**kwargs)
     pass

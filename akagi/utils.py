@@ -3,35 +3,28 @@ import itertools
 import cooler
 import pandas as pd
 import os
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 import numpy as np
 import hicstraw
 
 
-def read_cooler(cool_path: Union[str, os.PathLike], resolution: Optional[int]) -> (cooler.Cooler, list):
+def read_cooler(cool_path: Union[str, os.PathLike], resolution: Optional[int] = None) -> Tuple[cooler.Cooler, list]:
     """Reads a .cool or .mcool file with given resolution.
     :param cool_path: input path.
     :param resolution: desired resolution as integer.
     :returns: a tuple with parsed .cool file and a list of chromosomes
               and their sizes retrieved from the same file."""
 
-    try:
-        if cool_path.endswith('.mcool'):
-            cool_file = cooler.Cooler(f'{cool_path}::/resolutions/{resolution}')
+    if cool_path.endswith('.mcool'):
+        cool_file = cooler.Cooler(f'{cool_path}::/resolutions/{resolution}')
 
-        elif cool_path.endswith('.cool'):
-            cool_file = cooler.Cooler(cool_path)
+    elif cool_path.endswith('.cool'):
+        cool_file = cooler.Cooler(cool_path)
 
-        else:
-            raise ValueError('Provide a .cool or .mcool file')
+    else:
+        raise ValueError('Provide a .cool or .mcool file')
 
-        chromsizes = cool_file.chromsizes
-
-    except FileNotFoundError:
-        raise FileNotFoundError(f"No file found at {cool_path}")
-
-    except Exception as e:
-        raise e
+    chromsizes = cool_file.chromsizes
 
     return cool_file, chromsizes
 
@@ -41,7 +34,7 @@ def read_hic(path: Union[str, os.PathLike],
              norm: str = 'KR',
              datatype: str = 'observed'
              ) -> Union[np.ndarray, dict]:
-    """Returns a contact matrix for the specified chromosomes.
+    """Returns a contact matrices for the specified chromosomes.
     :arg path: path to a .hic file.
     :arg resolution: desired resolution in bp.
     :arg norm: normalization to get. Default is 'KR' (Knight-Ruiz). Supported: NONE, VC, VC_SQRT, KR, SCALE.
@@ -82,12 +75,12 @@ def read_hic(path: Union[str, os.PathLike],
                 return np_matrices
 
             except Exception as e:
-                raise e
+                print(e)
+                continue
 
     elif len(chromnames) == 0:
         raise IndexError('No chromosomes found in provided .hic file.')
-    else:
-        raise ValueError('Unknown error.')
+
 
 
 def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
