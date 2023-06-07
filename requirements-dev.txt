@@ -1,0 +1,8 @@
+flake8==4.0.1
+flake8-annotations==2.9.1
+flakeheaven==3.2.1
+mccabe==0.6.0
+pep8-naming==0.13.2
+pycodestyle==2.8.0
+pyflakes==2.4.0
+radon==5.1.0

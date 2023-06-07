@@ -1,0 +1,46 @@
+[tool.flakeheaven]
+extended_default_ignore = []
+exclude = [".git", "__pycache__", "*.md"]
+max_line_length = 120
+import_order_style = "pep8"
+max_cognitive_complexity = 7  # flake8-cognitive-complexity
+format = "grouped"
+
+# list of plugins and rules for them
+[tool.flakeheaven.plugins]
+flake8-quotes=["+*",
+    "-Q000"  # Double quotes found but single quotes preferred
+]
+flake8-annotations = ["+*",
+    "-ANN002",  # Missing type annotation for *args
+    "-ANN003",  # Missing type annotation for **kwargs
+    "-ANN101",  # Missing type annotation for self in method
+    "-ANN102",  # Missing type annotation for cls in classmethod
+    "-ANN204",  # Missing return type annotation for special method
+    "-ANN401",  # Dynamically typed expressions (typing.Any) are disallowed 
+]
+flake8-annotations-complexity = ["+*"]
+flake8-multiline-containers = ["+*"]
+flake8-bugbear = ["+*"]
+flake8-builtins = ["+*"]
+flake8-comprehensions = ["+*"]
+flake8-import-order = ["+*",
+    "-I201",  # Missing newline between import groups
+    "-I202",  # Additional newline in a group of imports
+]
+flake8-mutable = ["+*"]
+flake8-use-fstring = ["+*"]
+flake8-cognitive-complexity = ["+*"]
+flake8-variables-names = ["+*",
+    "-VNE002",  # Variable name should be clarified (disabled due to often used 'file' variable)
+    "-VNE003",  # Variable names that shadow builtins are not allowed (duplicates A003)
+]
+mccabe = ["+*"]
+pep8-naming = ["+*",
+    "-N818",  # All exceptions should be named with *Error suffix
+]
+pycodestyle = ["+*",
+    "-W503",   # Line break occurred before a binary operator. Actually it's best practice, see https://www.flake8rules.com/rules/W503.html
+]
+pyflakes = ["+*"]
+radon = ["+*"]

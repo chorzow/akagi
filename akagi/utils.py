@@ -1,8 +1,9 @@
 import itertools
+import os
 
 import cooler
 import pandas as pd
-import os
+
 from typing import Optional, Union, List, Tuple
 import numpy as np
 import hicstraw
