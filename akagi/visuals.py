@@ -23,7 +23,6 @@ def plot_cooler(clr: cooler.Cooler,
                 cmap: str = 'Blues',
                 ylabel: Optional[str] = None,
                 ax: Optional[plt.Axes] = None,
-                
                 **kwargs
                 ) -> plt.Axes:
     """Plots log-normalized contact matrix from a cooler.Cooler object.

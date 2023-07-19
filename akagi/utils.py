@@ -1,33 +1,48 @@
-import itertools
 import os
+import subprocess
+from typing import Optional, Union, List, Tuple
+
+import pandas as pd
+import numpy as np
+from scipy import sparse
+import itertools
+
 
 import cooler
-import pandas as pd
-
-from typing import Optional, Union, List, Tuple
-import numpy as np
 import hicstraw
 
 
-def read_cooler(cool_path: Union[str, os.PathLike], resolution: Optional[int] = None) -> Tuple[cooler.Cooler, list]:
-    """Reads a .cool or .mcool file with given resolution.
-    :param cool_path: input path.
-    :param resolution: desired resolution as integer.
-    :returns: a tuple with parsed .cool file and a list of chromosomes
-              and their sizes retrieved from the same file."""
+def cool_or_mcool(path: Union[str, os.PathLike]) -> str:
+    """Checks if file is a single-resolution, multi-resolution cooler or none of them.
+    :param path: path to file.
+    :returns: 'sr' if single-resolution, 'mr' if multi-resolution."""
 
-    if cool_path.endswith('.mcool'):
-        cool_file = cooler.Cooler(f'{cool_path}::/resolutions/{resolution}')
-
-    elif cool_path.endswith('.cool'):
-        cool_file = cooler.Cooler(cool_path)
-
+    if cooler.fileops.is_cooler(path):
+        return 'sr'
+    elif cooler.fileops.is_multires_file(path):
+        return 'mr'
     else:
         raise ValueError('Provide a .cool or .mcool file')
 
-    chromsizes = cool_file.chromsizes
 
-    return cool_file, chromsizes
+def read_cooler(path: Union[str, os.PathLike], resolution: Optional[int] = None) -> cooler.Cooler:
+    """Reads a .cool or .mcool file with given resolution.
+    :param cool_path: input path.
+    :param resolution: desired resolution as integer. if not provided and file is .mcool, reads the highest resolution.
+    :returns: class cooler.Cooler."""
+
+    if cool_or_mcool(path) == 'sr':
+        cool_file = cooler.Cooler(path)
+    elif cool_or_mcool(path) == 'mr':
+
+        if resolution is None:
+            resolutions_list = [int(i.split('/')[-1]) for i in cooler.fileops.list_coolers(path)]
+            resolutions_list.sort()
+            resolution = resolutions_list[0]
+
+        cool_file = cooler.Cooler(f'{path}::/resolutions/{resolution}')
+
+    return cool_file
 
 
 def read_hic(path: Union[str, os.PathLike],
@@ -83,7 +98,6 @@ def read_hic(path: Union[str, os.PathLike],
         raise IndexError('No chromosomes found in provided .hic file.')
 
 
-
 def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
     """Parse inter.txt file with Juicer Hi-C statistics.
     :param file: path to file.
@@ -97,7 +111,7 @@ def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
     genome = experiment_description[experiment_description.index('-g') + 1]
     lines = lines[1:]
 
-    stats = dict()
+    stats = {}
     for line in lines:
         line_splitted = line.split(': ')
         stats[line_splitted[0]] = line_splitted[1].split(' ')
@@ -116,7 +130,7 @@ def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
     return stats
 
 
-def poke_cool(path: Union[str, os.PathLike],
+def cooler_poke(path: Union[str, os.PathLike],
               n_diags: int,
               output: Union[str, os.PathLike],
               resolution: int = 1000
@@ -128,8 +142,8 @@ def poke_cool(path: Union[str, os.PathLike],
     :param output: output file path.
     :returns: a cool file of specified resolution with n_diags diagonals nullified."""
 
-    clr, csz = read_cooler(cool_path=path,
-                           resolution=resolution)
+    clr = read_cooler(cool_path=path,
+                      resolution=resolution)
 
     pixels = pd.DataFrame(clr.pixels()[:])
     bins = pd.DataFrame(clr.bins()[:])
@@ -161,11 +175,78 @@ def poke_cool(path: Union[str, os.PathLike],
     return c_poked
 
 
+def cooler_diff(clr1_path: Union[str, os.PathLike], clr2_path: Union[str, os.PathLike], out_dir: Union[str, os.PathLike],
+                out_name: str, resolutions: Optional[List[int]] = None) -> None:
+    """Subtracts matrices from clr1_path and clr2_path, then saves output as .mcool file. Equivalent of clr1_path - clr2_path.
+    Creates a new UNbalanced cooler. Resolutions are inferred from the clr1_path by default.
+    :param clr1_path:
+    :param map2_path:
+    :param out_dir: path to store output at. 
+    :param out_name: prefix name of resulting file without file extension. 
+    :returns: None
+    """
+
+    clr1 = read_cooler(clr1_path)
+    clr2 = read_cooler(clr2_path)
+
+    if resolutions is None:
+
+        print(f'No resolutions provided; fetching resolutions list from{clr1_path}...')
+        resolutions = [int(i.split('/')[-1]) for i in cooler.fileops.list_coolers(clr1_path)]
+        resolutions.sort()
+        resolutions = resolutions[1:]
+    
+    pixels_colnames = clr1.pixels()[:].columns.tolist()
+    bins_colnames = ['chrom', 'start', 'end']  # to remove previously calculated weights
+
+    mat1 = clr1.matrix(balance=False)[:]
+    mat2 = clr2.matrix(balance=False)[:]
+
+    print(f'Subtracting {clr2_path.split("/")[-1]} raw signal from {clr1_path.split("/")[-1]}...')
+
+    diff_mat = np.subtract(mat1, mat2)
+    triu_mat = np.triu(diff_mat)
+
+    print('Generating coo matrix...')
+
+    coo_mat = sparse.coo_matrix(triu_mat)
+    coo_mat_data = np.transpose([coo_mat.row, coo_mat.col, coo_mat.data])
+    pixels = pd.DataFrame(coo_mat_data, columns=pixels_colnames)
+    pixels = pixels.sort_values(['bin1_id', 'bin2_id']).drop_duplicates()
+
+    print(f'Writing temporary .cool...')
+
+    bins = pd.DataFrame(clr1.bins()[:])[bins_colnames]
+    cool_out = os.path.join(out_dir, out_name + '.cool')
+
+    try:
+        cooler.create_cooler(cool_uri=cool_out, bins=bins, pixels=pixels, symmetric_upper=True)
+    except Exception as e:  # TODO: add human-readable specific cases.
+        raise e
+
+    outfile = os.path.join(out_dir, out_name + '.mcool')    
+
+    print(f'Zoomifying {cool_out} for resolutions {resolutions} to {outfile}...')
+
+    try:
+        cooler.zoomify_cooler(cool_out, outfile=outfile, resolutions=resolutions, chunksize=1000000, nproc=4)
+    except ValueError as e:
+        if 'cannot be derived from the base' in str(e):
+            raise ValueError('Each item in resolutions must be a multiplier of the base resolution.')
+    print('Cleaning up...')
+
+    subprocess.run(['rm', cool_out])
+
+    print('Completed.')
+
+    return None
+
+
 class DistillerStats:
     """Operates with different sections of distiller's .stats file.
     Can be initialized with custom tables (just in case).
     Different attributes of this class represent different sections of .stats file."""
-    def __init__(self, path, **kwargs):
+    def __init__(self, path: Union[str, os.PathLike], **kwargs):
         self.path = path
         self._general = kwargs.get('general', None)
         self._pair_types = kwargs.get('pair_types', None)

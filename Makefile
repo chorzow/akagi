@@ -8,7 +8,7 @@ ifneq ($(missed),)
 endif
 
 lint: $(before-lint)
-	flakeheaven lint components
+	flakeheaven lint akagi
 
 linter-plugins:
 	pip install $(missed) -r requirements-dev.txt
