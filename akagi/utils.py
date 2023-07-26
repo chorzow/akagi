@@ -1,12 +1,11 @@
 import os
 import subprocess
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List
+import itertools
 
 import pandas as pd
 import numpy as np
 from scipy import sparse
-import itertools
-
 
 import cooler
 import hicstraw
@@ -74,25 +73,27 @@ def read_hic(path: Union[str, os.PathLike],
         except Exception as e:
             raise e
 
-    if len(chromnames) > 1:  # eukaryotes
-        print("More than one chromosome found. Perhaps it's gonna take a while. Yet perhaps not.")
-        np_matrices = {}
-        for chr1, chr2 in itertools.combinations_with_replacement(chromnames, 2):
-            try:
+    # TODO: rework and test next section
 
-                mat = hic.getMatrixZoomData(chr1, chr2, datatype, norm, 'BP', resolution)
+    # if len(chromnames) > 1:  # eukaryotes
+    #     print("More than one chromosome found. Perhaps it's gonna take a while. Yet perhaps not.")
+    #     np_matrices = {}
+    #     for chr1, chr2 in itertools.combinations_with_replacement(chromnames, 2):
+    #         try:
 
-                chr1_len = chromlengths[chromnames.index(chr1)]
-                chr2_len = chromlengths[chromnames.index(chr2)]
+    #             mat = hic.getMatrixZoomData(chr1, chr2, datatype, norm, 'BP', resolution)
 
-                np_mat = mat.getRecordsAsMatrix(0, chr1_len, 0, chr2_len)
-                np_matrices[f"{chr1}_{chr2}"] = np_mat
+    #             chr1_len = chromlengths[chromnames.index(chr1)]
+    #             chr2_len = chromlengths[chromnames.index(chr2)]
 
-                return np_matrices
+    #             np_mat = mat.getRecordsAsMatrix(0, chr1_len, 0, chr2_len)
+    #             np_matrices[f"{chr1}_{chr2}"] = np_mat
 
-            except Exception as e:
-                print(e)
-                continue
+    #             return np_matrices
+
+    #         except Exception as e:
+    #             print(e)
+    #             continue
 
     elif len(chromnames) == 0:
         raise IndexError('No chromosomes found in provided .hic file.')
@@ -131,10 +132,10 @@ def read_inter(file: Union[str, os.PathLike]) -> pd.DataFrame:
 
 
 def cooler_poke(path: Union[str, os.PathLike],
-              n_diags: int,
-              output: Union[str, os.PathLike],
-              resolution: int = 1000
-              ) -> cooler.Cooler:
+                n_diags: int,
+                output: Union[str, os.PathLike],
+                resolution: int = 1000
+                ) -> cooler.Cooler:
     """Poke out main diagonals of a contact matrix.
     :param path: path to a .cool file to operate with.
     :param n_diags: number of diagonals to poke out.
@@ -175,14 +176,18 @@ def cooler_poke(path: Union[str, os.PathLike],
     return c_poked
 
 
-def cooler_diff(clr1_path: Union[str, os.PathLike], clr2_path: Union[str, os.PathLike], out_dir: Union[str, os.PathLike],
-                out_name: str, resolutions: Optional[List[int]] = None) -> None:
-    """Subtracts matrices from clr1_path and clr2_path, then saves output as .mcool file. Equivalent of clr1_path - clr2_path.
+def cooler_diff(clr1_path: Union[str, os.PathLike],
+                clr2_path: Union[str, os.PathLike],
+                out_dir: Union[str, os.PathLike],
+                out_name: str,
+                resolutions: Optional[List[int]] = None
+                ) -> None:
+    """Subtracts two matrices, then saves output as .mcool file. Equivalent of clr1_path - clr2_path.
     Creates a new UNbalanced cooler. Resolutions are inferred from the clr1_path by default.
     :param clr1_path:
     :param map2_path:
-    :param out_dir: path to store output at. 
-    :param out_name: prefix name of resulting file without file extension. 
+    :param out_dir: path to store output at.
+    :param out_name: prefix name of resulting file without file extension.
     :returns: None
     """
 
@@ -195,7 +200,7 @@ def cooler_diff(clr1_path: Union[str, os.PathLike], clr2_path: Union[str, os.Pat
         resolutions = [int(i.split('/')[-1]) for i in cooler.fileops.list_coolers(clr1_path)]
         resolutions.sort()
         resolutions = resolutions[1:]
-    
+
     pixels_colnames = clr1.pixels()[:].columns.tolist()
     bins_colnames = ['chrom', 'start', 'end']  # to remove previously calculated weights
 
@@ -214,7 +219,7 @@ def cooler_diff(clr1_path: Union[str, os.PathLike], clr2_path: Union[str, os.Pat
     pixels = pd.DataFrame(coo_mat_data, columns=pixels_colnames)
     pixels = pixels.sort_values(['bin1_id', 'bin2_id']).drop_duplicates()
 
-    print(f'Writing temporary .cool...')
+    print('Writing temporary .cool...')
 
     bins = pd.DataFrame(clr1.bins()[:])[bins_colnames]
     cool_out = os.path.join(out_dir, out_name + '.cool')
@@ -224,7 +229,7 @@ def cooler_diff(clr1_path: Union[str, os.PathLike], clr2_path: Union[str, os.Pat
     except Exception as e:  # TODO: add human-readable specific cases.
         raise e
 
-    outfile = os.path.join(out_dir, out_name + '.mcool')    
+    outfile = os.path.join(out_dir, out_name + '.mcool')
 
     print(f'Zoomifying {cool_out} for resolutions {resolutions} to {outfile}...')
 

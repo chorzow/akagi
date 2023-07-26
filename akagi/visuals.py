@@ -1,4 +1,5 @@
 import os
+from typing import Optional, Tuple
 
 import cooler
 import cooltools
@@ -8,11 +9,6 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import FuncFormatter
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-from typing import Optional, Tuple
-from matplotlib.ticker import FuncFormatter
-from matplotlib.colors import LogNorm
-
 
 
 def plot_cooler(clr: cooler.Cooler,
@@ -83,7 +79,7 @@ def plot_hic(hic: np.ndarray,
     :arg ylabel: ylabel.
     :arg ax: plt.Axes object to plot matrix on. If not specified, such object is created.
     :returns: plt.Axes object of a contact matrix extracted from hic."""
-    
+
     if ax is None:
         _, ax = plt.subplots(**kwargs)
     pass
